@@ -18,10 +18,11 @@ class InfoCommand extends AbstractCommand
     const INPUT_KEY_PHYSICAL = 'physical';
 
     protected $functionMap = [
-        self::INPUT_KEY_DATABASE => 'executeDatabaseImages',
-        self::INPUT_KEY_PHYSICAL => 'executePhysicalImages',
-        self::INPUT_KEY_MISSING  => 'executeMissingImages',
-        self::INPUT_KEY_UNUSED   => 'executeUnusedImages',
+        self::INPUT_KEY_DATABASE  => 'executeDatabaseImages',
+        self::INPUT_KEY_PHYSICAL  => 'executePhysicalImages',
+        self::INPUT_KEY_MISSING   => 'executeMissingImages',
+        self::INPUT_KEY_UNUSED    => 'executeUnusedImages',
+        self::INPUT_KEY_DUPLICATE => 'executeDuplicateImages',
     ];
 
     /**
@@ -53,6 +54,11 @@ class InfoCommand extends AbstractCommand
                 'p',
                 InputOption::VALUE_NONE,
                 'Info on Product images in the filesystem'
+            )->addOption(
+                self::INPUT_KEY_DUPLICATE,
+                null,
+                InputOption::VALUE_NONE,
+                'Info on Duplicate Product Images'
             );
 
         parent::configure();
@@ -106,7 +112,7 @@ class InfoCommand extends AbstractCommand
         $output->writeln('<info>' . $databaseImageCount . ' Unique Images in Database</info>');
         if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE && $databaseImageCount > 0) {
             $databaseImages = array_unique($this->getDatabaseProductImages());
-            $longestString = max(array_map('strlen', $databaseImages));
+            $longestString = $this->getLongestFilePath();
 
             $output->writeln('+-' . str_pad('', $longestString, '-') . '-+------+');
             $output->writeln('| ' . str_pad('Filename', $longestString) . ' | Uses |');
@@ -126,7 +132,7 @@ class InfoCommand extends AbstractCommand
 
         if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE && $physicalImageCount > 0) {
             $physicalImages = $this->getPhysicalProductImages();
-            $longestString = max(array_map('strlen', $physicalImages));
+            $longestString = $this->getLongestFilePath();
 
             $output->writeln('+-' . str_pad('', $longestString, '-') . '-+');
             $output->writeln('| ' . str_pad('Filename', $longestString) . ' |');
@@ -155,7 +161,7 @@ class InfoCommand extends AbstractCommand
         if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
             if ($this->getMissingProductImageCount() > 0) {
                 $missingImages = array_unique($this->getMissingProductImages());
-                $longestString = max(array_map('strlen', $missingImages));
+                $longestString = $this->getLongestFilePath();
 
                 $output->writeln('+-' . str_pad('', $longestString, '-') . '-+------+');
                 $output->writeln('| ' . str_pad('Filename', $longestString) . ' | Uses |');
@@ -184,7 +190,7 @@ class InfoCommand extends AbstractCommand
         if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
             if ($this->getUnusedProductImageCount() > 0) {
                 $unusedImages = $this->getUnusedProductImages();
-                $longestString = max(array_map('strlen', $unusedImages));
+                $longestString = $this->getLongestFilePath();
 
                 $output->writeln('+-' . str_pad('', $longestString, '-') . '-+');
                 $output->writeln('| ' . str_pad('Filename', $longestString) . ' |');
@@ -196,6 +202,39 @@ class InfoCommand extends AbstractCommand
 
                 $output->writeln('+-' . str_pad('', $longestString, '-') . '-+');
             }
+        }
+    }
+
+    protected function executeDuplicateImages(OutputInterface $output)
+    {
+        $duplicateImageCount = $this->getDuplicateImageCount();
+        $output->writeln('<info>' . $duplicateImageCount . ' Duplicate Images</info>');
+
+        if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE && $duplicateImageCount > 0) {
+            $duplicateImages = $this->getDuplicateProductImages();
+            $longestString = $this->getLongestFilePath();
+            $duplicateImageTree = $this->getDuplicateTree(true);
+            $maxDuplicate = max(array_map('strlen', $duplicateImageTree));
+
+            $output->writeln('+-' . str_pad('', $longestString, '-') . '-+-' . str_pad('', $maxDuplicate, '-') . '-+');
+            $output->writeln('| '
+                . str_pad('Filename', $longestString)
+                . ' | '
+                . str_pad('Duplicates', $maxDuplicate)
+                . ' |'
+            );
+            $output->writeln('+-' . str_pad('', $longestString, '-') . '-+-' . str_pad('', $maxDuplicate, '-') . '-+');
+
+            foreach ($duplicateImages as $image => $hash) {
+                $output->writeln('| '
+                    . str_pad($image, $longestString)
+                    . ' | '
+                    . str_pad($duplicateImageTree[$image], $maxDuplicate)
+                    . ' |'
+                );
+            }
+
+            $output->writeln('+-' . str_pad('', $longestString, '-') . '-+-' . str_pad('', $maxDuplicate, '-') . '-+');
         }
     }
 }

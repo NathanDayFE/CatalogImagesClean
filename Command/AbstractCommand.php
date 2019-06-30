@@ -22,8 +22,9 @@ use Magento\Framework\Filesystem\Driver\File;
 class AbstractCommand extends Command
 {
     /** Input Keys */
-    const INPUT_KEY_MISSING = 'missing';
-    const INPUT_KEY_UNUSED  = 'unused';
+    const INPUT_KEY_DUPLICATE = 'duplicate';
+    const INPUT_KEY_MISSING   = 'missing';
+    const INPUT_KEY_UNUSED    = 'unused';
 
     /** @var Filesystem */
     protected $filesystem;
@@ -37,6 +38,11 @@ class AbstractCommand extends Command
     protected $physicalImages;
     protected $unusedImages;
     protected $duplicateImages;
+    protected $physicalImageHashes;
+    protected $duplicateImageTree;
+
+    /** int */
+    protected $longestFilePath;
 
     /** @var MediaConfig */
     protected $imageConfig;
@@ -173,6 +179,79 @@ class AbstractCommand extends Command
     /**
      * @return array
      * @throws \Magento\Framework\Exception\FileSystemException
+     */
+    protected function getPhysicalImagesHashes()
+    {
+        if (!isset($this->physicalImagesHash)) {
+            $this->physicalImageHashes = [];
+
+            foreach ($this->getPhysicalProductImages() as $imagePath) {
+                $this->physicalImageHashes[$imagePath] = md5(
+                    $this->fileDriver->fileGetContents(
+                        $this->getFullImagePath($imagePath)
+                    )
+                );
+            }
+
+            krsort($this->physicalImageHashes);
+        }
+
+        return $this->physicalImageHashes;
+    }
+
+
+    protected function getDuplicateProductImages($image = null)
+    {
+        $physicalImageHashes = $this->getPhysicalImagesHashes();
+
+        if ($image === null) {
+            if (!isset($this->duplicateImages)) {
+                $duplicateImages = array_diff_key($physicalImageHashes, array_unique($physicalImageHashes));
+                array_multisort(array_keys($duplicateImages), SORT_NATURAL| SORT_FLAG_CASE, $duplicateImages);
+                $this->duplicateImages = array_unique($duplicateImages);
+            }
+
+            return $this->duplicateImages;
+        } else {
+            if (array_key_exists($image, $physicalImageHashes)) {
+                $duplicates = [];
+                $duplicateKeys = array_diff(array_keys($physicalImageHashes, $physicalImageHashes[$image]), [$image]);
+                foreach ($duplicateKeys as $duplicateKey) {
+                    $duplicates[] = $duplicateKey;
+                }
+
+                return $duplicates;
+            }
+
+            return [];
+        }
+    }
+
+    protected function getDuplicateImageCount()
+    {
+        return count($this->getDuplicateProductImages());
+    }
+
+    protected function getDuplicateTree($flat = false)
+    {
+        if (!isset($this->duplicateImageTree)) {
+            $this->duplicateImageTree = [];
+
+            foreach ($this->getDuplicateProductImages() as $image => $hash) {
+                if (!$flat) {
+                    $this->duplicateImageTree[$image] = $this->getDuplicateProductImages($image);
+                } else {
+                    $this->duplicateImageTree[$image] = implode(', ', $this->getDuplicateProductImages($image));
+                }
+            }
+        }
+
+        return $this->duplicateImageTree;
+    }
+
+    /**
+     * @return array
+     * @throws \Magento\Framework\Exception\FileSystemException
      * @throws \Magento\Framework\Exception\LocalizedException
      */
     protected function getUnusedProductImages()
@@ -265,5 +344,14 @@ class AbstractCommand extends Command
         return $this->mediaDirectory->getAbsolutePath(
             $this->imageConfig->getMediaPath($filename)
         );
+    }
+
+    protected function getLongestFilePath()
+    {
+        if (!isset($this->longestFilePath)) {
+            $this->longestFilePath = max(array_map('strlen', $this->getPhysicalProductImages()));
+        }
+
+        return $this->longestFilePath;
     }
 }
